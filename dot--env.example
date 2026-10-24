@@ -1,0 +1,44 @@
+# Copy to .env and fill in. NEVER commit .env to git.
+
+# --- Telegram ---
+BOT_TOKEN=123456789:replace-with-token-from-BotFather
+# Your Telegram user id(s), comma separated (get it from @userinfobot)
+ADMIN_IDS=123456789
+# Chat/channel id for order notifications (e.g. -1001234567890). Empty = private messages to ADMIN_IDS.
+# The bot must be a member (admin for channels) of this chat.
+ADMIN_CHAT_ID=
+
+# polling (simple, recommended) or webhook
+BOT_MODE=polling
+# Only for webhook mode:
+WEBHOOK_BASE_URL=
+WEBHOOK_SECRET=
+PORT=8080
+
+# --- Claude (Anthropic) ---
+# Without a key the bot still works in rule-based mode, but without photo recognition.
+ANTHROPIC_API_KEY=
+CLAUDE_MODEL=claude-opus-5-5
+CLAUDE_EFFORT=low
+# Server-side refusal fallback (beta). Set to false if your model does not support it.
+CLAUDE_FALLBACKS=true
+AI_REQUESTS_PER_USER_PER_HOUR=60
+
+# --- Database ---
+# Local docker-compose: postgresql://sneaker:sneaker@db:5432/sneaker_bot
+# Railway: use the reference variable ${{Postgres.DATABASE_URL}}
+DATABASE_URL=postgresql://sneaker:sneaker@localhost:5432/sneaker_bot
+
+# --- Business rules ---
+SHOP_NAME=Sneaker Shop
+RESERVATION_TTL_MINUTES=1440
+CONFIRMED_RESERVATION_TTL_HOURS=72
+
+# --- Privacy / limits ---
+DATA_RETENTION_DAYS=365
+DIALOG_TTL_HOURS=24
+HISTORY_MAX_MESSAGES=8
+MAX_PHOTO_MB=5
+RATE_LIMIT_PER_MINUTE=20
+
+LOG_LEVEL=INFO

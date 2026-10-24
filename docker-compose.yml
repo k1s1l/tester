@@ -1,0 +1,53 @@
+# Local development / self-hosting.
+#   docker compose up -d --build            # PostgreSQL + bot
+#   docker compose --profile backup up -d   # + daily pg_dump backups into ./backups
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sneaker
+      POSTGRES_PASSWORD: sneaker
+      POSTGRES_DB: sneaker_bot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init_test_db.sql:/docker-entrypoint-initdb.d/init_test_db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sneaker -d sneaker_bot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  bot:
+    build:
+      context: .
+      args:
+        INSTALL_DEV: "true"
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://sneaker:sneaker@db:5432/sneaker_bot
+      TEST_DATABASE_URL: postgresql+asyncpg://sneaker:sneaker@db:5432/sneaker_bot_test
+    depends_on:
+      db:
+        condition: service_healthy
+    stop_grace_period: 20s
+
+  backup:
+    image: postgres:16-alpine
+    profiles: ["backup"]
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: sneaker
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup_db.sh:/backup_db.sh:ro
+    entrypoint: ["sh", "-c", "while true; do DATABASE_URL=postgresql://sneaker@db:5432/sneaker_bot sh /backup_db.sh /backups; sleep 86400; done"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

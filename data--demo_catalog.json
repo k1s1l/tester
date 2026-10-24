@@ -1,0 +1,103 @@
+[
+  {
+    "brand": "Nike",
+    "model": "Vomero 5",
+    "sku": "NV5",
+    "color": "сірий, срібний",
+    "category": "lifestyle",
+    "tags": ["retro-running", "mesh", "y2k", "cushioning"],
+    "price": 5800,
+    "description": "ДЕМО-ТОВАР. Ретро-бігова модель із м'якою амортизацією та сітчастим верхом.",
+    "is_active": true,
+    "is_demo": true,
+    "sizes": [
+      {"size": 42, "quantity": 3},
+      {"size": 43, "quantity": 1},
+      {"size": 44, "quantity": 0},
+      {"size": 45, "quantity": 2},
+      {"size": 47, "quantity": 1}
+    ],
+    "photo_urls": []
+  },
+  {
+    "brand": "Nike",
+    "model": "P-6000",
+    "sku": "NP6000",
+    "color": "білий, срібний",
+    "category": "lifestyle",
+    "tags": ["retro-running", "mesh", "y2k"],
+    "price": 5200,
+    "description": "ДЕМО-ТОВАР. Силует у стилі бігових кросівок 2000-х.",
+    "is_active": true,
+    "is_demo": true,
+    "sizes": [
+      {"size": 41, "quantity": 2},
+      {"size": 42, "quantity": 1},
+      {"size": 43, "quantity": 0},
+      {"size": 44, "quantity": 2},
+      {"size": 45, "quantity": 1}
+    ],
+    "photo_urls": []
+  },
+  {
+    "brand": "Nike",
+    "model": "Air Max Excee",
+    "sku": "NAMEXCEE",
+    "color": "білий, чорний",
+    "category": "lifestyle",
+    "tags": ["air-max", "everyday"],
+    "price": 4300,
+    "description": "ДЕМО-ТОВАР. Повсякденні кросівки з видимою вставкою Air.",
+    "is_active": true,
+    "is_demo": true,
+    "sizes": [
+      {"size": 40, "quantity": 1},
+      {"size": 41, "quantity": 2},
+      {"size": 42, "quantity": 2},
+      {"size": 43, "quantity": 1},
+      {"size": 44, "quantity": 1}
+    ],
+    "photo_urls": []
+  },
+  {
+    "brand": "New Balance",
+    "model": "1906R",
+    "sku": "NB1906R",
+    "color": "сірий, срібний",
+    "category": "lifestyle",
+    "tags": ["retro-running", "mesh", "y2k", "cushioning"],
+    "price": 6100,
+    "description": "ДЕМО-ТОВАР. Технічний ретро-раннер із підошвою ABZORB.",
+    "is_active": true,
+    "is_demo": true,
+    "sizes": [
+      {"size": 41, "quantity": 1},
+      {"size": 42, "quantity": 2},
+      {"size": 43, "quantity": 2},
+      {"size": 44, "quantity": 1},
+      {"size": 45, "quantity": 0}
+    ],
+    "photo_urls": []
+  },
+  {
+    "brand": "ASICS",
+    "model": "GEL-1130",
+    "sku": "AG1130",
+    "color": "білий, сріблястий",
+    "category": "lifestyle",
+    "tags": ["retro-running", "mesh", "y2k"],
+    "price": 4900,
+    "description": "ДЕМО-ТОВАР. Ретро-модель із гелевою амортизацією GEL.",
+    "is_active": true,
+    "is_demo": true,
+    "sizes": [
+      {"size": 40, "quantity": 2},
+      {"size": 41, "quantity": 1},
+      {"size": 42, "quantity": 0},
+      {"size": 43, "quantity": 3},
+      {"size": 44, "quantity": 2},
+      {"size": 45, "quantity": 1}
+    ],
+    "photo_urls": []
+  }
+]
