@@ -34,6 +34,14 @@ SHOP_NAME=Sneaker Shop
 RESERVATION_TTL_MINUTES=1440
 CONFIRMED_RESERVATION_TTL_HOURS=72
 
+# --- Catalog from a Telegram channel ---
+# Make the bot an administrator of the channel. Empty = accept posts from any channel where it is admin.
+CATALOG_CHANNEL_ID=
+# false = the admin confirms every recognised product; true = save automatically
+CHANNEL_AUTO_PUBLISH=false
+# Pairs per size when a post lists sizes without quantities
+CHANNEL_DEFAULT_QUANTITY=1
+
 # --- Privacy / limits ---
 DATA_RETENTION_DAYS=365
 DIALOG_TTL_HOURS=24

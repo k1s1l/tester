@@ -120,3 +120,29 @@ def categories_keyboard(categories: Sequence[str]) -> InlineKeyboardMarkup:
         builder.button(text=category, callback_data=AdminCategoryCb(category=category))
     builder.adjust(3)
     return builder.as_markup()
+
+
+class DraftCb(CallbackData, prefix="dr"):
+    action: str  # new | update | price | sizes | skip
+    draft_id: int
+
+
+def draft_keyboard(draft_id: int, *, existing_sku: str | None) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text="✅ Додати в каталог", callback_data=DraftCb(action="new", draft_id=draft_id).pack())]]
+    if existing_sku:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"🔁 Оновити існуючий {existing_sku}",
+                    callback_data=DraftCb(action="update", draft_id=draft_id).pack(),
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(text="💰 Ціна", callback_data=DraftCb(action="price", draft_id=draft_id).pack()),
+            InlineKeyboardButton(text="📏 Розміри", callback_data=DraftCb(action="sizes", draft_id=draft_id).pack()),
+        ]
+    )
+    rows.append([InlineKeyboardButton(text="❌ Пропустити", callback_data=DraftCb(action="skip", draft_id=draft_id).pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)

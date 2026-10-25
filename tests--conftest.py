@@ -10,15 +10,17 @@ import os
 from pathlib import Path
 
 import pytest
+from aiogram import Bot
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import Settings
 from app.database.base import Base
 from app.database.session import create_session_factory
+from app.main import build_dispatcher
 from app.services.assistant import DialogContext, SalesAssistant, UserInfo
 from app.services.catalog_import import import_catalog, load_file
-from tests.fakes import FakeAI
+from tests.fakes import FakeAI, MockedSession
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/sneaker_bot_test"
@@ -86,3 +88,26 @@ def user() -> UserInfo:
 @pytest.fixture
 def ctx() -> DialogContext:
     return DialogContext()
+
+
+# One Dispatcher per test session: aiogram routers can be attached to a single parent only.
+@pytest.fixture(scope="session")
+def session_mock() -> MockedSession:
+    return MockedSession()
+
+
+@pytest.fixture(scope="session")
+def module_ai() -> FakeAI:
+    return FakeAI()
+
+
+@pytest.fixture(scope="session")
+def bot(session_mock) -> Bot:
+    return Bot("42:TEST", session=session_mock)
+
+
+@pytest.fixture(scope="session")
+def dispatcher(settings, session_factory, bot, module_ai):
+    dp, _ = build_dispatcher(settings, session_factory, bot, module_ai)  # type: ignore[arg-type]
+    dp["importer"].album_delay = 0.05
+    return dp

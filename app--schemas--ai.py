@@ -52,3 +52,27 @@ class PhotoAnalysis(BaseModel):
     distinctive_features: list[str] = Field(default_factory=list)
     confidence: float = Field(description="0.0-1.0 confidence that brand AND model are identified correctly")
     reply: str = Field(description="Short Ukrainian description of what is visible, no stock or prices")
+
+
+Category = Literal["lifestyle", "running", "basketball", "training", "walking"]
+
+
+class ParsedSize(BaseModel):
+    size: str = Field(description="EU size as a number string like '42' or '42.5'")
+    quantity: int | None = Field(None, description="Pairs of this size if the post states it, else null")
+
+
+class ParsedProduct(BaseModel):
+    brand: str = Field(description="Brand in Latin script, e.g. 'Nike'")
+    model: str = Field(description="Model name without the brand, e.g. 'Air Max 90'")
+    color: str = Field(description="Colorway in Ukrainian, lowercase, or empty string")
+    category: Category
+    price_uah: int | None = Field(None, description="Current selling price in UAH, or null if not stated")
+    sizes: list[ParsedSize] = Field(default_factory=list)
+    description: str = Field(description="1-2 short sentences in Ukrainian based only on the post")
+
+
+class CatalogPostAnalysis(BaseModel):
+    is_product_post: bool = Field(description="True if the post offers sneakers for sale")
+    products: list[ParsedProduct] = Field(default_factory=list)
+    confidence: float = Field(description="0.0-1.0 confidence that brand, model and price were read correctly")

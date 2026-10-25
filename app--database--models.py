@@ -339,3 +339,27 @@ class FsmRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True
     )
+
+
+class DraftStatus(StrEnum):
+    PENDING = "pending"
+    SAVED = "saved"
+    SKIPPED = "skipped"
+
+
+class ProductDraft(TimestampMixin, Base):
+    """A product recognised in a Telegram channel post, waiting for the admin's decision."""
+
+    __tablename__ = "product_drafts"
+    __table_args__ = (CheckConstraint(_enum_check("status", DraftStatus), name="status_valid"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # "post:<channel_id>:<message_id>:<index>" - the same post forwarded twice is processed once
+    source_key: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    photo_file_ids: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    existing_product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
+    product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=DraftStatus.PENDING)

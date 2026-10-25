@@ -8,10 +8,10 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
-from aiogram.methods import SendDocument, SendMessage, SendPhoto, TelegramMethod
-from aiogram.types import Chat, Message
+from aiogram.methods import GetFile, SendDocument, SendMessage, SendPhoto, TelegramMethod
+from aiogram.types import Chat, File, Message
 
-from app.schemas.ai import MessageAnalysis, PhotoAnalysis
+from app.schemas.ai import CatalogPostAnalysis, MessageAnalysis, PhotoAnalysis
 from app.services.ai import AIUnavailable
 
 
@@ -22,6 +22,7 @@ class FakeAI:
         self.enabled = True
         self.message_result: MessageAnalysis | Exception | None = None
         self.photo_result: PhotoAnalysis | Exception | None = None
+        self.post_result: CatalogPostAnalysis | Exception | None = None
         self.calls: list[dict[str, Any]] = []
 
     async def analyze_message(self, **kwargs: Any) -> MessageAnalysis:
@@ -36,6 +37,15 @@ class FakeAI:
     async def analyze_photo(self, **kwargs: Any) -> PhotoAnalysis:
         self.calls.append(kwargs)
         result = self.photo_result
+        if isinstance(result, Exception):
+            raise result
+        if result is None:
+            raise AIUnavailable("not configured")
+        return result
+
+    async def parse_catalog_post(self, **kwargs: Any) -> CatalogPostAnalysis:
+        self.calls.append(kwargs)
+        result = self.post_result
         if isinstance(result, Exception):
             raise result
         if result is None:
@@ -63,6 +73,8 @@ class MockedSession(BaseSession):
         if self.fail_with is not None:
             raise self.fail_with
         self.requests.append(method)
+        if isinstance(method, GetFile):
+            return File(file_id=method.file_id, file_unique_id=method.file_id, file_path="photos/file.jpg")
         if isinstance(method, (SendMessage, SendPhoto, SendDocument)):
             return Message(
                 message_id=len(self.requests),
@@ -74,7 +86,7 @@ class MockedSession(BaseSession):
 
     async def stream_content(self, url: str, headers: dict[str, Any] | None = None, timeout: int = 30,
                              chunk_size: int = 65536, raise_for_status: bool = True) -> AsyncGenerator[bytes, None]:
-        yield b""
+        yield b"\xff\xd8\xff\xe0" + b"0" * 64  # tiny JPEG-looking payload
 
     async def close(self) -> None:
         return None

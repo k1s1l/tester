@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     min_size: float = 30.0
     max_size: float = 52.0
 
+    # --- Catalog import from a Telegram channel ---
+    # Only posts from this channel are imported. Empty = any channel where the bot is an administrator.
+    catalog_channel_id: int | None = None
+    # true = save recognised products immediately; false = send a draft to the admin for confirmation
+    channel_auto_publish: bool = False
+    # Pairs per size when a post lists sizes without quantities
+    channel_default_quantity: int = 1
+
     # --- Dialog / privacy ---
     history_max_messages: int = 8
     dialog_ttl_hours: int = 24
@@ -78,7 +86,7 @@ class Settings(BaseSettings):
             return [int(part) for part in value.replace(";", ",").split(",") if part.strip()]
         return value
 
-    @field_validator("admin_chat_id", mode="before")
+    @field_validator("admin_chat_id", "catalog_channel_id", mode="before")
     @classmethod
     def _empty_chat_to_none(cls, value: object) -> object:
         return None if value == "" else value

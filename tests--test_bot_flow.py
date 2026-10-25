@@ -11,7 +11,6 @@ from decimal import Decimal
 from itertools import count
 
 import pytest
-from aiogram import Bot
 from aiogram.methods import AnswerCallbackQuery, SendMessage
 from aiogram.types import CallbackQuery, Chat, Contact, ErrorEvent, Message, Update, User
 from sqlalchemy import select
@@ -22,32 +21,10 @@ from app.database.models import Order, OrderStatus, ProductSize
 from app.handlers.common import on_error
 from app.keyboards.admin import AdminOrderCb
 from app.keyboards.client import CheckoutCb, OrderCb
-from app.main import build_dispatcher
 from tests.conftest import ADMIN_CHAT, ADMIN_ID, CLIENT_ID
-from tests.fakes import FakeAI, MockedSession, analysis
+from tests.fakes import MockedSession, analysis
 
 _ids = count(1)
-
-
-@pytest.fixture(scope="module")
-def session_mock() -> MockedSession:
-    return MockedSession()
-
-
-@pytest.fixture(scope="module")
-def module_ai() -> FakeAI:
-    return FakeAI()
-
-
-@pytest.fixture(scope="module")
-def bot(session_mock) -> Bot:
-    return Bot("42:TEST", session=session_mock)
-
-
-@pytest.fixture(scope="module")
-def dispatcher(settings, session_factory, bot, module_ai):
-    dp, _ = build_dispatcher(settings, session_factory, bot, module_ai)  # type: ignore[arg-type]
-    return dp
 
 
 @pytest.fixture(autouse=True)

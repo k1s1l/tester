@@ -34,7 +34,7 @@ ADMIN_COMMANDS = (
     "admin", "add_product", "edit_product", "products", "stock", "set_stock",
     "orders", "order", "stats", "export_orders",
 )
-ADMIN_CALLBACK_PREFIXES = ("ao:", "am:", "ap:", "apg:", "acat:")
+ADMIN_CALLBACK_PREFIXES = ("ao:", "am:", "ap:", "apg:", "acat:", "dr:")
 
 
 @router.message(CommandStart(), F.chat.type == "private")
