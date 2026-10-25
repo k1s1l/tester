@@ -1,4 +1,4 @@
-"""Checkout: product + size -> name -> contact -> summary -> confirm."""
+"""Checkout: product + size -> full name -> phone -> city -> delivery service -> branch/address -> confirm."""
 
 from __future__ import annotations
 
@@ -20,7 +20,14 @@ from app.database.models import Customer, Order
 from app.database.session import SessionFactory
 from app.handlers.utils import load_ctx, save_ctx, send_reply
 from app.keyboards import client as kb
-from app.schemas.order import normalize_contact, normalize_name, normalize_phone
+from app.schemas.order import (
+    DELIVERY_SERVICES,
+    first_name,
+    normalize_city,
+    normalize_delivery_point,
+    normalize_full_name,
+    normalize_phone,
+)
 from app.services import catalog
 from app.services.assistant import SalesAssistant
 from app.services.notifications import NotificationSender
@@ -35,11 +42,72 @@ log = logging.getLogger(__name__)
 router = Router(name="order")
 router.message.filter(F.chat.type == "private")
 
+# Order of the questions; every value is validated before it is stored in the profile.
+PROFILE_FIELDS = ("name", "contact", "city", "delivery_service", "delivery_point")
+
 
 class OrderFlow(StatesGroup):
     name = State()
     contact = State()
+    city = State()
+    delivery_service = State()
+    delivery_point = State()
     confirm = State()
+
+
+def _saved_profile(customer: Customer | None, profile: dict) -> dict:
+    """Merge the current dialog profile with data saved from the client's previous order (re-validated)."""
+    result = dict(profile)
+    if customer is None:
+        return result
+    saved = {
+        "name": normalize_full_name(customer.full_name or ""),
+        "contact": normalize_phone(customer.contact or ""),
+        "city": normalize_city(customer.city or ""),
+        "delivery_service": customer.delivery_service if customer.delivery_service in DELIVERY_SERVICES else None,
+    }
+    if saved["delivery_service"]:
+        saved["delivery_point"] = normalize_delivery_point(customer.delivery_point or "", saved["delivery_service"])
+    for key, value in saved.items():
+        if not result.get(key) and value:
+            result[key] = value
+    return result
+
+
+async def _profile(state: FSMContext) -> dict:
+    return dict((await state.get_data()).get("profile") or {})
+
+
+async def _ask_next(message: Message, state: FSMContext) -> None:
+    """Ask for the first missing piece of delivery data, or show the order summary."""
+    profile = await _profile(state)
+    if not profile.get("name"):
+        await state.set_state(OrderFlow.name)
+        await message.answer(texts.ORDER_ASK_NAME, reply_markup=kb.cancel_only_keyboard())
+    elif not profile.get("contact"):
+        await state.set_state(OrderFlow.contact)
+        await message.answer(
+            texts.ORDER_ASK_CONTACT.format(name=texts.h(first_name(profile["name"]))),
+            reply_markup=kb.contact_request_keyboard(),
+        )
+    elif not profile.get("city"):
+        await state.set_state(OrderFlow.city)
+        await message.answer(texts.ORDER_ASK_CITY, reply_markup=kb.cancel_only_keyboard())
+    elif profile.get("delivery_service") not in DELIVERY_SERVICES:
+        await state.set_state(OrderFlow.delivery_service)
+        await message.answer(texts.ORDER_ASK_DELIVERY, reply_markup=kb.delivery_keyboard())
+    elif not profile.get("delivery_point"):
+        await state.set_state(OrderFlow.delivery_point)
+        await message.answer(texts.ORDER_ASK_POINT[profile["delivery_service"]], reply_markup=kb.cancel_only_keyboard())
+    else:
+        await _show_summary(message, state)
+
+
+async def _store(message: Message, state: FSMContext, **values: str) -> None:
+    profile = await _profile(state)
+    profile.update(values)
+    await state.update_data(profile=profile)
+    await _ask_next(message, state)
 
 
 async def start_checkout(
@@ -59,12 +127,7 @@ async def start_checkout(
         await message.answer(texts.ORDER_DRAFT_MISSING)
         return
 
-    data = await state.get_data()
-    profile = dict(data.get("profile") or {})
-    if customer is not None:
-        profile["name"] = profile.get("name") or customer.full_name
-        profile["contact"] = profile.get("contact") or customer.contact
-
+    profile = _saved_profile(customer, await _profile(state))
     draft = {
         "token": uuid.uuid4().hex,
         "product_id": product.id,
@@ -74,18 +137,7 @@ async def start_checkout(
         "is_demo": product.is_demo,
     }
     await state.update_data(draft=draft, profile=profile)
-
-    if profile.get("name") and profile.get("contact"):
-        await _show_summary(message, state)
-        return
-    if profile.get("name"):
-        await state.set_state(OrderFlow.contact)
-        await message.answer(
-            texts.ORDER_ASK_CONTACT.format(name=texts.h(profile["name"])), reply_markup=kb.contact_request_keyboard()
-        )
-        return
-    await state.set_state(OrderFlow.name)
-    await message.answer(texts.ORDER_ASK_NAME, reply_markup=kb.cancel_only_keyboard())
+    await _ask_next(message, state)
 
 
 async def _show_summary(message: Message, state: FSMContext) -> None:
@@ -101,6 +153,9 @@ async def _show_summary(message: Message, state: FSMContext) -> None:
             name=profile["name"],
             contact=profile["contact"],
             is_demo=draft["is_demo"],
+            delivery_service=profile.get("delivery_service"),
+            city=profile.get("city"),
+            delivery_point=profile.get("delivery_point"),
         ),
         reply_markup=kb.checkout_confirm_keyboard(draft["token"]),
     )
@@ -120,19 +175,11 @@ async def cancel_text(message: Message, state: FSMContext) -> None:
 
 @router.message(OrderFlow.name, F.text)
 async def got_name(message: Message, state: FSMContext) -> None:
-    name = normalize_name(message.text or "")
+    name = normalize_full_name(message.text or "")
     if name is None:
         await message.answer(texts.ORDER_BAD_NAME, reply_markup=kb.cancel_only_keyboard())
         return
-    data = await state.get_data()
-    profile = dict(data.get("profile") or {})
-    profile["name"] = name
-    await state.update_data(profile=profile)
-    if profile.get("contact"):
-        await _show_summary(message, state)
-        return
-    await state.set_state(OrderFlow.contact)
-    await message.answer(texts.ORDER_ASK_CONTACT.format(name=texts.h(name)), reply_markup=kb.contact_request_keyboard())
+    await _store(message, state, name=name)
 
 
 @router.message(OrderFlow.contact, F.contact)
@@ -145,24 +192,49 @@ async def got_shared_contact(message: Message, state: FSMContext) -> None:
     if phone is None:
         await message.answer(texts.ORDER_BAD_CONTACT, reply_markup=kb.contact_request_keyboard())
         return
-    await _save_contact(message, state, phone)
+    await _store(message, state, contact=phone)
 
 
 @router.message(OrderFlow.contact, F.text)
 async def got_text_contact(message: Message, state: FSMContext) -> None:
-    contact = normalize_contact(message.text or "")
-    if contact is None:
+    phone = normalize_phone(message.text or "")
+    if phone is None:
         await message.answer(texts.ORDER_BAD_CONTACT, reply_markup=kb.contact_request_keyboard())
         return
-    await _save_contact(message, state, contact)
+    await _store(message, state, contact=phone)
 
 
-async def _save_contact(message: Message, state: FSMContext, contact: str) -> None:
-    data = await state.get_data()
-    profile = dict(data.get("profile") or {})
-    profile["contact"] = contact
-    await state.update_data(profile=profile)
-    await _show_summary(message, state)
+@router.message(OrderFlow.city, F.text)
+async def got_city(message: Message, state: FSMContext) -> None:
+    city = normalize_city(message.text or "")
+    if city is None:
+        await message.answer(texts.ORDER_BAD_CITY, reply_markup=kb.cancel_only_keyboard())
+        return
+    await _store(message, state, city=city)
+
+
+@router.callback_query(OrderFlow.delivery_service, kb.DeliveryCb.filter())
+async def got_delivery_service(callback: CallbackQuery, callback_data: kb.DeliveryCb, state: FSMContext) -> None:
+    await callback.answer()
+    if callback_data.service not in DELIVERY_SERVICES or not isinstance(callback.message, Message):
+        return
+    try:
+        await callback.message.edit_text(
+            f"{texts.ORDER_ASK_DELIVERY} <b>{texts.DELIVERY_LABELS[callback_data.service]}</b>", reply_markup=None
+        )
+    except TelegramBadRequest:
+        pass
+    await _store(callback.message, state, delivery_service=callback_data.service, delivery_point="")
+
+
+@router.message(OrderFlow.delivery_point, F.text)
+async def got_delivery_point(message: Message, state: FSMContext) -> None:
+    service = (await _profile(state)).get("delivery_service") or "nova_poshta"
+    point = normalize_delivery_point(message.text or "", service)
+    if point is None:
+        await message.answer(texts.ORDER_BAD_POINT[service], reply_markup=kb.cancel_only_keyboard())
+        return
+    await _store(message, state, delivery_point=point)
 
 
 @router.message(OrderFlow.confirm)
@@ -170,13 +242,15 @@ async def confirm_reminder(message: Message) -> None:
     await message.answer("Будь ласка, підтвердіть або скасуйте замовлення кнопками вище. 👆")
 
 
-@router.message(StateFilter(OrderFlow.name, OrderFlow.contact))
+@router.message(OrderFlow.delivery_service)
+async def delivery_reminder(message: Message) -> None:
+    await message.answer(texts.ORDER_ASK_DELIVERY, reply_markup=kb.delivery_keyboard())
+
+
+@router.message(StateFilter(OrderFlow.name, OrderFlow.contact, OrderFlow.city, OrderFlow.delivery_point))
 async def unexpected_content(message: Message, state: FSMContext) -> None:
-    current = await state.get_state()
-    if current == OrderFlow.name.state:
-        await message.answer(texts.ORDER_ASK_NAME, reply_markup=kb.cancel_only_keyboard())
-    else:
-        await message.answer(texts.ORDER_BAD_CONTACT, reply_markup=kb.contact_request_keyboard())
+    # A photo/sticker instead of the expected text: repeat the current question.
+    await _ask_next(message, state)
 
 
 @router.callback_query(kb.CheckoutCb.filter(F.action == "confirm"))
@@ -205,7 +279,7 @@ async def confirm_order(
             show_alert=True,
         )
         return
-    if not profile.get("name") or not profile.get("contact"):
+    if any(not profile.get(field) for field in PROFILE_FIELDS):
         await callback.answer(texts.ORDER_DRAFT_MISSING, show_alert=True)
         return
     await callback.answer("Оформлюю замовлення…")
@@ -223,6 +297,9 @@ async def confirm_order(
             customer_name=profile["name"],
             contact=profile["contact"],
             idempotency_key=callback_data.token,
+            delivery_service=profile["delivery_service"],
+            city=profile["city"],
+            delivery_point=profile["delivery_point"],
         )
     except (InsufficientStock, ProductUnavailable):
         await state.set_state(None)
@@ -270,8 +347,7 @@ async def edit_profile(callback: CallbackQuery, callback_data: kb.CheckoutCb, st
         return
     await _drop_buttons(callback.message)
     await state.update_data(profile={})
-    await state.set_state(OrderFlow.name)
-    await callback.message.answer(texts.ORDER_ASK_NAME, reply_markup=kb.cancel_only_keyboard())
+    await _ask_next(callback.message, state)
 
 
 async def _drop_buttons(message: Message) -> None:

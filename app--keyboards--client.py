@@ -42,6 +42,10 @@ class CheckoutCb(CallbackData, prefix="c"):
     token: str
 
 
+class DeliveryCb(CallbackData, prefix="dl"):
+    service: str  # nova_poshta | ukrposhta | meest
+
+
 class ClientOrderCb(CallbackData, prefix="co"):
     action: str  # cancel
     order_id: int
@@ -110,7 +114,7 @@ def checkout_confirm_keyboard(token: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="✅ Підтвердити", callback_data=CheckoutCb(action="confirm", token=token).pack()),
                 InlineKeyboardButton(text="❌ Скасувати", callback_data=CheckoutCb(action="cancel", token=token).pack()),
             ],
-            [InlineKeyboardButton(text="✏️ Змінити ім'я / контакт", callback_data=CheckoutCb(action="edit", token=token).pack())],
+            [InlineKeyboardButton(text="✏️ Змінити дані отримувача", callback_data=CheckoutCb(action="edit", token=token).pack())],
         ]
     )
 
@@ -128,6 +132,16 @@ def contact_request_keyboard() -> ReplyKeyboardMarkup:
 
 def cancel_only_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=CANCEL_TEXT)]], resize_keyboard=True)
+
+
+def delivery_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔴 Нова Пошта", callback_data=DeliveryCb(service="nova_poshta").pack())],
+            [InlineKeyboardButton(text="🟡 Укрпошта", callback_data=DeliveryCb(service="ukrposhta").pack())],
+            [InlineKeyboardButton(text="🔵 Meest Пошта", callback_data=DeliveryCb(service="meest").pack())],
+        ]
+    )
 
 
 def client_order_keyboard(order_id: int) -> InlineKeyboardMarkup:

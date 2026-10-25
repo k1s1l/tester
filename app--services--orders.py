@@ -127,6 +127,7 @@ async def _upsert_customer(
     telegram_name: str | None,
     full_name: str,
     contact: str,
+    delivery: dict[str, str | None],
 ) -> Customer:
     customer = await session.scalar(
         select(Customer).where(Customer.telegram_id == telegram_id).with_for_update()
@@ -138,6 +139,9 @@ async def _upsert_customer(
     customer.telegram_name = telegram_name
     customer.full_name = full_name
     customer.contact = contact
+    customer.delivery_service = delivery.get("delivery_service")
+    customer.city = delivery.get("city")
+    customer.delivery_point = delivery.get("delivery_point")
     customer.last_seen_at = utcnow()
     await session.flush()
     return customer
@@ -155,6 +159,7 @@ async def _create_order(
     customer_name: str,
     contact: str,
     idempotency_key: str,
+    delivery: dict[str, str | None],
 ) -> Order:
     open_orders = await session.scalar(
         select(func.count(Order.id)).where(
@@ -183,6 +188,7 @@ async def _create_order(
         telegram_name=telegram_name,
         full_name=customer_name,
         contact=contact,
+        delivery=delivery,
     )
     quantity = 1
     price = Decimal(product.price)  # price fixed at the moment of purchase
@@ -192,6 +198,9 @@ async def _create_order(
         username=username,
         customer_name=customer_name,
         contact=contact,
+        delivery_service=delivery.get("delivery_service"),
+        city=delivery.get("city"),
+        delivery_point=delivery.get("delivery_point"),
         status=OrderStatus.PENDING,
         total_amount=price * quantity,
         idempotency_key=idempotency_key,
@@ -248,12 +257,16 @@ async def place_order(
     customer_name: str,
     contact: str,
     idempotency_key: str,
+    delivery_service: str | None = None,
+    city: str | None = None,
+    delivery_point: str | None = None,
 ) -> PlaceOrderResult:
     """Create an order exactly once per idempotency key, re-checking and reserving stock atomically.
 
     Raises InsufficientStock / ProductUnavailable / TooManyOpenOrders. Any failure rolls back the whole
     transaction, so a half-created order or a reservation without an order can never exist.
     """
+    delivery = {"delivery_service": delivery_service, "city": city, "delivery_point": delivery_point}
     for _ in range(2):
         try:
             async with session_factory() as session, session.begin():
@@ -271,6 +284,7 @@ async def place_order(
                     customer_name=customer_name,
                     contact=contact,
                     idempotency_key=idempotency_key,
+                    delivery=delivery,
                 )
             log.info("Order #%s created (product %s, size %s)", order.number, product_id, size)
             return PlaceOrderResult(order, created=True)

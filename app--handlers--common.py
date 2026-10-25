@@ -79,10 +79,13 @@ async def cmd_forget(message: Message, state: FSMContext, session_factory: Sessi
         await session.execute(
             update(Customer)
             .where(Customer.telegram_id == message.from_user.id)
-            .values(full_name=None, contact=None, username=None, telegram_name=None)
+            .values(
+                full_name=None, contact=None, username=None, telegram_name=None,
+                delivery_service=None, city=None, delivery_point=None,
+            )
         )
     await message.answer(
-        "Історію діалогу та збережені ім'я й контакт видалено. Дані вже оформлених замовлень зберігаються "
+        "Історію діалогу та збережені дані отримувача (ПІБ, телефон, адресу доставки) видалено. Дані вже оформлених замовлень зберігаються "
         "лише для їх виконання та обліку.",
         reply_markup=ReplyKeyboardRemove(),
     )

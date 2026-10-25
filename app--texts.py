@@ -23,6 +23,12 @@ STATUS_LABELS: dict[str, str] = {
     OrderStatus.EXPIRED: "Резерв минув",
 }
 
+DELIVERY_LABELS = {
+    "nova_poshta": "Нова Пошта",
+    "ukrposhta": "Укрпошта",
+    "meest": "Meest Пошта",
+}
+
 CATEGORY_LABELS = {
     "lifestyle": "повсякденні",
     "running": "бігові",
@@ -137,13 +143,32 @@ PHOTO_AI_DOWN = (
 PHOTO_DISCLAIMER = "Фото допомагає визначити модель, а наявність я перевіряю в нашій базі."
 
 # Checkout
-ORDER_ASK_NAME = "Чудово! Щоб оформити замовлення, напишіть, будь ласка, ваше ім'я."
-ORDER_BAD_NAME = "Вкажіть, будь ласка, ім'я літерами (2–60 символів)."
-ORDER_ASK_CONTACT = (
-    "Дякую, {name}! Тепер залиште номер телефону для зв'язку — натисніть кнопку нижче "
-    "або напишіть номер (можна також @username чи e-mail)."
+ORDER_ASK_NAME = (
+    "Чудово! Для відправлення напишіть, будь ласка, прізвище, ім'я та по батькові отримувача.\n"
+    "Наприклад: Шевченко Тарас Григорович"
 )
-ORDER_BAD_CONTACT = "Не вдалося розпізнати контакт. Напишіть номер у форматі +380XXXXXXXXX, @username або e-mail."
+ORDER_BAD_NAME = (
+    "Вкажіть, будь ласка, прізвище, ім'я та по батькові літерами через пробіл.\n"
+    "Наприклад: Шевченко Тарас Григорович"
+)
+ORDER_ASK_CONTACT = (
+    "Дякую, {name}! Тепер номер телефону отримувача — натисніть кнопку нижче "
+    "або напишіть його у форматі +380XXXXXXXXX."
+)
+ORDER_BAD_CONTACT = "Не вдалося розпізнати номер. Напишіть його у форматі +380XXXXXXXXX або 0XXXXXXXXX."
+ORDER_ASK_CITY = "У яке місто надіслати замовлення? Напишіть назву населеного пункту."
+ORDER_BAD_CITY = "Вкажіть, будь ласка, назву міста або села літерами, наприклад: Київ."
+ORDER_ASK_DELIVERY = "Оберіть службу доставки:"
+ORDER_ASK_POINT = {
+    "nova_poshta": "Вкажіть номер відділення або поштомату Нової Пошти.\nНаприклад: 12 або «поштомат 3456».",
+    "ukrposhta": "Вкажіть індекс і адресу відділення Укрпошти.\nНаприклад: 01001, вул. Хрещатик, 22.",
+    "meest": "Вкажіть номер відділення або поштомату Meest.\nНаприклад: 7 або «поштомат 1234».",
+}
+ORDER_BAD_POINT = {
+    "nova_poshta": "Вкажіть номер відділення або поштомату цифрами, наприклад: 12.",
+    "ukrposhta": "Вкажіть індекс (5 цифр) і адресу, наприклад: 01001, вул. Хрещатик, 22.",
+    "meest": "Вкажіть номер відділення або поштомату цифрами, наприклад: 7.",
+}
 ORDER_FOREIGN_CONTACT = "Будь ласка, поділіться власним контактом або напишіть номер вручну."
 ORDER_CANCELLED_DRAFT = "Оформлення скасовано. Якщо передумаєте — просто напишіть, що шукаєте. 👟"
 ORDER_SIZE_GONE = "На жаль, поки ми оформлювали замовлення, розмір {size} моделі {title} закінчився."
@@ -152,14 +177,35 @@ ORDER_ALREADY_CREATED = "Замовлення #{number} вже оформлен�
 ORDER_TOO_MANY = "Схоже, у вас кілька незавершених замовлень. Дочекайтеся, будь ласка, зв'язку з адміністратором."
 
 
-def order_summary(*, title: str, size: Decimal, price: Decimal, name: str, contact: str, is_demo: bool) -> str:
+def delivery_text(service: str | None, city: str | None, point: str | None) -> str:
+    if not service:
+        return "—"
+    parts = [DELIVERY_LABELS.get(service, service), city or "", point or ""]
+    return h(", ".join(p for p in parts if p))
+
+
+def order_summary(
+    *,
+    title: str,
+    size: Decimal,
+    price: Decimal,
+    name: str,
+    contact: str,
+    is_demo: bool,
+    delivery_service: str | None = None,
+    city: str | None = None,
+    delivery_point: str | None = None,
+) -> str:
     text = (
         "Перевірте, будь ласка, замовлення:\n"
         f"Модель: <b>{h(title)}</b>\n"
         f"Розмір: <b>{fmt_size(size)}</b>\n"
-        f"Ціна: <b>{fmt_price(price)}</b>\n"
-        f"Ім'я: {h(name)}\n"
-        f"Контакт: {h(contact)}\n"
+        f"Ціна: <b>{fmt_price(price)}</b>\n\n"
+        f"Отримувач: {h(name)}\n"
+        f"Телефон: {h(contact)}\n"
+        f"Доставка: {DELIVERY_LABELS.get(delivery_service or '', '—')}\n"
+        f"Місто: {h(city or '—')}\n"
+        f"Відділення / адреса: {h(delivery_point or '—')}\n"
     )
     if is_demo:
         text += "<i>Увага: це демонстраційний товар.</i>\n"
@@ -173,7 +219,8 @@ def order_created(order: Order) -> str:
         f"Номер замовлення: <b>#{order.number}</b>\n"
         f"Модель: {h(item.brand)} {h(item.model)}\n"
         f"Розмір: {fmt_size(item.size)}\n"
-        f"Сума: <b>{fmt_price(order.total_amount)}</b>\n\n"
+        f"Сума: <b>{fmt_price(order.total_amount)}</b>\n"
+        f"Доставка: {delivery_text(order.delivery_service, order.city, order.delivery_point)}\n\n"
         "Ваше замовлення прийнято. Адміністратор зв'яжеться з вами для уточнення оплати та доставки."
     )
 
@@ -218,8 +265,11 @@ def admin_order_text(order: Order) -> str:
         f"Колір: {h(item.color) or '—'}\n"
         f"Розмір: {fmt_size(item.size)}\n"
         f"Ціна: {fmt_price(item.unit_price)}\n"
-        f"Ім'я: {h(order.customer_name)}\n"
-        f"Контакт: {h(order.contact)}\n"
+        f"ПІБ: {h(order.customer_name)}\n"
+        f"Телефон: {h(order.contact)}\n"
+        f"Доставка: {DELIVERY_LABELS.get(order.delivery_service or '', '—')}\n"
+        f"Місто: {h(order.city or '—')}\n"
+        f"Відділення / адреса: {h(order.delivery_point or '—')}\n"
         f"Telegram: {username}\n"
         f"ID клієнта: <code>{order.telegram_id}</code>\n"
         f"Статус: <b>{STATUS_LABELS.get(order.status, order.status)}</b>"

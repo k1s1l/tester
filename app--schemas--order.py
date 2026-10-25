@@ -16,6 +16,55 @@ def normalize_name(raw: str) -> str | None:
     return name
 
 
+_WORD_RE = re.compile(r"^[A-Za-zА-Яа-яІіЇїЄєҐґЁёЫыЭэЪъ'’ʼ-]{2,40}$")
+_CITY_RE = re.compile(r"^[A-Za-zА-Яа-яІіЇїЄєҐґЁёЫыЭэЪъ0-9'’ʼ .,()-]{2,80}$")
+
+DELIVERY_SERVICES = ("nova_poshta", "ukrposhta", "meest")
+_SETTLEMENT_PREFIXES = {"м", "с", "смт", "сел", "селище"}
+
+
+def _capitalize(word: str) -> str:
+    return "-".join(part[:1].upper() + part[1:].lower() for part in word.split("-"))
+
+
+def normalize_full_name(raw: str) -> str | None:
+    """Прізвище Ім'я По батькові: 2-4 words of letters (patronymic may be absent, e.g. for foreigners)."""
+    words = raw.strip().split()
+    if not 2 <= len(words) <= 4 or not all(_WORD_RE.match(word) for word in words):
+        return None
+    return " ".join(_capitalize(word) for word in words)
+
+
+def first_name(full_name: str) -> str:
+    """Ім'я from "Прізвище Ім'я По батькові" (used to address the client)."""
+    parts = full_name.split()
+    return parts[1] if len(parts) >= 2 else full_name
+
+
+def normalize_city(raw: str) -> str | None:
+    city = " ".join(raw.strip().split())
+    if not _CITY_RE.match(city) or sum(ch.isalpha() for ch in city) < 2:
+        return None
+    first = city.split()[0].rstrip(".").lower()
+    if first in _SETTLEMENT_PREFIXES:  # "смт. Козелець", "с. Петрівка" stay as typed
+        return city
+    return city[:1].upper() + city[1:]
+
+
+def normalize_delivery_point(raw: str, service: str) -> str | None:
+    """Branch / parcel locker number (Nova Poshta, Meest) or postcode + address (Ukrposhta)."""
+    point = " ".join(raw.strip().split())
+    if not 1 <= len(point) <= 160:
+        return None
+    if service == "ukrposhta":
+        return point if re.search(r"(?<!\d)\d{5}(?!\d)", point) else None
+    if not re.search(r"\d", point):
+        return None
+    if point.isdigit():
+        return f"Відділення №{point}"
+    return point
+
+
 def normalize_phone(raw: str) -> str | None:
     """Accept Ukrainian and international numbers. Returns E.164-like '+380XXXXXXXXX' or None."""
     digits = re.sub(r"[\s()\-.]", "", raw.strip())

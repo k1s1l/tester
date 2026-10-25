@@ -29,13 +29,18 @@ async def purge_personal_data(session_factory: SessionFactory, settings: Setting
         result = await session.execute(
             update(Order)
             .where(Order.status.in_(FINAL_STATUSES), Order.updated_at < cutoff, Order.anonymized_at.is_(None))
-            .values(customer_name="—", contact="—", username=None, anonymized_at=utcnow())
+            .values(
+                customer_name="—", contact="—", username=None, city=None, delivery_point=None, anonymized_at=utcnow()
+            )
         )
         orders = result.rowcount or 0
         await session.execute(
             update(Customer)
             .where(Customer.last_seen_at < cutoff)
-            .values(full_name=None, contact=None, username=None, telegram_name=None)
+            .values(
+                full_name=None, contact=None, username=None, telegram_name=None,
+                delivery_service=None, city=None, delivery_point=None,
+            )
         )
         await session.execute(
             delete(FsmRecord).where(

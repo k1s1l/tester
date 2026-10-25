@@ -7,7 +7,16 @@ import pytest
 from app.config import Settings
 from app.logging_setup import redact
 from app.schemas.catalog import ProductIn, parse_size, parse_sizes_spec
-from app.schemas.order import mask_personal_data, normalize_contact, normalize_name, normalize_phone
+from app.schemas.order import (
+    first_name,
+    mask_personal_data,
+    normalize_city,
+    normalize_contact,
+    normalize_delivery_point,
+    normalize_full_name,
+    normalize_name,
+    normalize_phone,
+)
 from app.services.fallback_parser import parse_message
 from app.services.reports import _csv_safe
 
@@ -86,3 +95,19 @@ def test_fallback_parser_basic(settings):
     assert a.model == "Gel Kayano 31" and a.size is None
     a = parse_message("хочу замовити gel-1130 43", products)  # type: ignore[arg-type]
     assert (a.intent, a.model, a.size) == ("start_order", "GEL-1130", "43")
+
+
+def test_delivery_data_validation():
+    assert normalize_full_name("  шевченко   тарас григорович ") == "Шевченко Тарас Григорович"
+    assert normalize_full_name("Коваль-Петренко Анна") == "Коваль-Петренко Анна"
+    assert normalize_full_name("Тарас") is None  # surname + name are required
+    assert normalize_full_name("Іванов 123 Петрович") is None
+    assert first_name("Шевченко Тарас Григорович") == "Тарас"
+    assert normalize_city("київ") == "Київ"
+    assert normalize_city("смт. Козелець") == "смт. Козелець"
+    assert normalize_city("1") is None
+    assert normalize_delivery_point("12", "nova_poshta") == "Відділення №12"
+    assert normalize_delivery_point("поштомат 3456", "nova_poshta") == "поштомат 3456"
+    assert normalize_delivery_point("центральне", "nova_poshta") is None
+    assert normalize_delivery_point("01001, вул. Хрещатик, 22", "ukrposhta") == "01001, вул. Хрещатик, 22"
+    assert normalize_delivery_point("вул. Хрещатик, 22", "ukrposhta") is None

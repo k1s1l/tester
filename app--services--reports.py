@@ -89,7 +89,8 @@ async def stock_text(session: AsyncSession, product: Product | None = None) -> s
 
 CSV_COLUMNS = [
     "number", "created_at", "status", "brand", "model", "sku", "color", "size", "unit_price", "quantity",
-    "total_amount", "customer_name", "contact", "telegram_username", "telegram_id",
+    "total_amount", "customer_name", "contact", "delivery_service", "city", "delivery_point",
+    "telegram_username", "telegram_id",
 ]
 
 
@@ -118,6 +119,9 @@ async def export_orders_csv(session: AsyncSession, days: int | None = None) -> b
                     f"{order.total_amount:.2f}",
                     _csv_safe(order.customer_name),
                     _csv_safe(order.contact),
+                    texts.DELIVERY_LABELS.get(order.delivery_service or "", ""),
+                    _csv_safe(order.city or ""),
+                    _csv_safe(order.delivery_point or ""),
                     _csv_safe(order.username or ""),
                     order.telegram_id,
                 ]

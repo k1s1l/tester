@@ -20,7 +20,7 @@ from app import texts
 from app.database.models import Order, OrderStatus, ProductSize
 from app.handlers.common import on_error
 from app.keyboards.admin import AdminOrderCb
-from app.keyboards.client import CheckoutCb, OrderCb
+from app.keyboards.client import CheckoutCb, DeliveryCb, OrderCb
 from tests.conftest import ADMIN_CHAT, ADMIN_ID, CLIENT_ID
 from tests.fakes import MockedSession, analysis
 
@@ -101,18 +101,34 @@ async def test_full_purchase_flow(dispatcher, bot, session_mock, module_ai, sess
     order_cb = next(b.callback_data for row in reply.reply_markup.inline_keyboard for b in row if b.callback_data.startswith("o:"))
     assert OrderCb.unpack(order_cb).size == "47"
 
-    # 2. "Оформити замовлення" -> name -> phone (shared contact)
+    # 2. "Оформити замовлення" -> ПІБ -> phone (shared contact) -> city -> delivery service -> branch
     session_mock.clear()
     await dispatcher.feed_update(bot, callback_update(CLIENT_ID, order_cb))
     assert texts.ORDER_ASK_NAME in session_mock.sent_texts(CLIENT_ID)
-    await dispatcher.feed_update(bot, message_update(CLIENT_ID, "Микита"))
+    await dispatcher.feed_update(bot, message_update(CLIENT_ID, "Микита"))  # only a first name: rejected
+    assert session_mock.sent_texts(CLIENT_ID)[-1] == texts.ORDER_BAD_NAME
+    await dispatcher.feed_update(bot, message_update(CLIENT_ID, "шевченко микита олегович"))
     assert "Дякую, Микита!" in session_mock.sent_texts(CLIENT_ID)[-1]
-    session_mock.clear()
     contact = Contact(phone_number="380671234567", first_name="Микита", user_id=CLIENT_ID)
     await dispatcher.feed_update(bot, message_update(CLIENT_ID, contact=contact))
+    assert session_mock.sent_texts(CLIENT_ID)[-1] == texts.ORDER_ASK_CITY
+    await dispatcher.feed_update(bot, message_update(CLIENT_ID, "Київ"))
+    delivery_msg = session_mock.requests[-1]
+    assert delivery_msg.text == texts.ORDER_ASK_DELIVERY
+    np_cb = delivery_msg.reply_markup.inline_keyboard[0][0].callback_data
+    assert DeliveryCb.unpack(np_cb).service == "nova_poshta"
+    await dispatcher.feed_update(bot, callback_update(CLIENT_ID, np_cb))
+    assert session_mock.sent_texts(CLIENT_ID)[-1] == texts.ORDER_ASK_POINT["nova_poshta"]
+    await dispatcher.feed_update(bot, message_update(CLIENT_ID, "відділення"))  # no number
+    assert session_mock.sent_texts(CLIENT_ID)[-1] == texts.ORDER_BAD_POINT["nova_poshta"]
+    session_mock.clear()
+    await dispatcher.feed_update(bot, message_update(CLIENT_ID, "12"))
     summary = session_mock.requests[-1]
     assert "Перевірте, будь ласка, замовлення" in summary.text
     assert "Розмір: <b>47</b>" in summary.text and "5800 грн" in summary.text and "+380671234567" in summary.text
+    assert "Отримувач: Шевченко Микита Олегович" in summary.text
+    assert "Доставка: Нова Пошта" in summary.text and "Місто: Київ" in summary.text
+    assert "Відділення / адреса: Відділення №12" in summary.text
     confirm_cb = summary.reply_markup.inline_keyboard[0][0].callback_data
     assert CheckoutCb.unpack(confirm_cb).action == "confirm"
 
@@ -123,6 +139,9 @@ async def test_full_purchase_flow(dispatcher, bot, session_mock, module_ai, sess
     assert any("Номер замовлення: <b>#1001</b>" in t for t in client_texts)
     admin_texts = session_mock.sent_texts(ADMIN_CHAT)
     assert admin_texts and "НОВЕ ЗАМОВЛЕННЯ #1001" in admin_texts[0] and "Статус: <b>Очікує підтвердження</b>" in admin_texts[0]
+    for line in ("ПІБ: Шевченко Микита Олегович", "Телефон: +380671234567", "Доставка: Нова Пошта",
+                 "Місто: Київ", "Відділення / адреса: Відділення №12"):
+        assert line in admin_texts[0]
     assert not any("оплачено" in t.lower() for t in client_texts)
 
     # 4. Second press of the same confirm button does not create another order (scenario 12)
@@ -131,7 +150,9 @@ async def test_full_purchase_flow(dispatcher, bot, session_mock, module_ai, sess
     assert callback_answers(session_mock) == [texts.ORDER_ALREADY_CREATED.format(number=1001)]
     async with session_factory() as session:
         orders = (await session.scalars(select(Order))).all()
-    assert len(orders) == 1 and orders[0].customer_name == "Микита" and orders[0].contact == "+380671234567"
+    assert len(orders) == 1 and orders[0].customer_name == "Шевченко Микита Олегович"
+    assert orders[0].contact == "+380671234567"
+    assert (orders[0].delivery_service, orders[0].city, orders[0].delivery_point) == ("nova_poshta", "Київ", "Відділення №12")
 
     # 5. Admin confirms via button; repeated press is reported, not applied twice
     session_mock.clear()
@@ -142,13 +163,13 @@ async def test_full_purchase_flow(dispatcher, bot, session_mock, module_ai, sess
     assert answers[0] == "Статус: Підтверджено" and "вже має статус" in answers[1]
     assert any("підтверджено" in t for t in session_mock.sent_texts(CLIENT_ID))
 
-    # 6. Next order: saved name/contact are reused, phone is not requested again
+    # 6. Next order: saved recipient and delivery data are reused, nothing is asked again
     module_ai.message_result = analysis("start_order", brand="ASICS", model="GEL-1130", size="43")
     session_mock.clear()
     await dispatcher.feed_update(bot, message_update(CLIENT_ID, "Хочу замовити GEL-1130 43"))
     sent = session_mock.sent_texts(CLIENT_ID)
-    assert any("Перевірте, будь ласка, замовлення" in t for t in sent)
-    assert texts.ORDER_ASK_NAME not in sent
+    assert any("Перевірте, будь ласка, замовлення" in t and "Відділення №12" in t for t in sent)
+    assert texts.ORDER_ASK_NAME not in sent and texts.ORDER_ASK_CITY not in sent
 
 
 async def test_checkout_cancel(dispatcher, bot, session_mock, module_ai, session_factory):
@@ -163,7 +184,7 @@ async def test_checkout_cancel(dispatcher, bot, session_mock, module_ai, session
 async def test_invalid_phone_is_asked_again(dispatcher, bot, session_mock, module_ai):
     module_ai.message_result = analysis("start_order", brand="Nike", model="Vomero 5", size="42")
     await dispatcher.feed_update(bot, message_update(8888, "беру vomero 42"))
-    await dispatcher.feed_update(bot, message_update(8888, "Олена"))
+    await dispatcher.feed_update(bot, message_update(8888, "Коваль Олена Петрівна"))
     await dispatcher.feed_update(bot, message_update(8888, "не скажу"))
     assert session_mock.sent_texts(8888)[-1] == texts.ORDER_BAD_CONTACT
 
